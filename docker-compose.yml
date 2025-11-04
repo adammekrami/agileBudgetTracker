@@ -1,0 +1,65 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15
+    container_name: agile_tracker_db
+    environment:
+      POSTGRES_DB: agile_tracker_db
+      POSTGRES_USER: agile_user
+      POSTGRES_PASSWORD: agile_password_dev
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agile_user -d agile_tracker_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agile_tracker_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agile_tracker_backend
+    command: python manage.py runserver 0.0.0.0:8000
+    environment:
+      - DEBUG=1
+      - DATABASE_URL=postgresql://agile_user:agile_password_dev@db:5432/agile_tracker_db
+      - POSTGRES_NAME=agile_tracker_db
+      - POSTGRES_USER=agile_user
+      - POSTGRES_PASSWORD=agile_password_dev
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend_static:/app/staticfiles
+      - backend_media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - agile_tracker_network
+    stdin_open: true
+    tty: true
+
+volumes:
+  postgres_data:
+    driver: local
+  backend_static:
+    driver: local
+  backend_media:
+    driver: local
+
+networks:
+  agile_tracker_network:
+    driver: bridge
